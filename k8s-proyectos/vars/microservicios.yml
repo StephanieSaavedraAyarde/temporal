@@ -1,8 +1,0 @@
-cluster:
-  cluster_name: cluster.local
-  project_name: microservicios
-  proyectos:
-    - name: ms-books
-    - name: ms-sales
-    - name: ms-customers
-    - name: microservicios-frontend
