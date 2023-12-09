@@ -1,0 +1,112 @@
+---
+- name: Instalar GitLab Runner
+  hosts: k8s-control
+  vars_files:
+    - "{{ vars_file }}"
+  tasks:
+    - name: eliminar GitLab Runner Helm repository
+      kubernetes.core.helm_repository:
+        name: gitlab
+        repo_url: https://charts.gitlab.io/
+        state: absent
+      tags:
+        - proyectos
+    
+    - name: Add GitLab Runner Helm repository
+      kubernetes.core.helm_repository:
+        name: gitlab
+        repo_url: https://charts.gitlab.io/
+        state: present
+      tags:
+        - proyectos
+
+    - name: Copiar Helm {{ cluster.project_name }}
+      copy:
+        src: "proyectos/{{ cluster.project_name }}"
+        dest: "clusters/{{ cluster.cluster_name }}/proyectos"
+        owner: "{{ ansible_user_id }}"
+        group: "{{ ansible_user_id }}"
+      tags:
+        - proyectos
+        - proyectos-helm
+
+    - name: Obtener valor codificado en base64
+      shell: "cat clusters/{{ cluster.cluster_name }}/proyectos/{{ cluster.project_name }}/{{ item.name }}/values-val-template.yaml | base64 -w 0"
+      register: encoded_value
+      tags:
+        - proyectos 
+      loop: "{{ cluster.proyectos }}"
+   
+    - name: "Reemplazar valor en VALUES_DEV_TEMPLATE"
+      lineinfile:
+        path: "clusters/{{ cluster.cluster_name }}/proyectos/{{ cluster.project_name }}/{{ cluster.proyectos[index].name }}/{{ cluster.proyectos[index].name }}-runner.yaml"
+        regexp: "VALUES_DEV_TEMPLATE:"
+        line: "        VALUES_DEV_TEMPLATE: {{ result.stdout }}"
+      tags: 
+        - proyectos 
+      loop: "{{ encoded_value.results }}"
+      loop_control:
+        index_var: index
+        loop_var: result 
+    
+    - name: "Reemplazar valor en VALUES_VAL_TEMPLATE"
+      lineinfile:
+        path: "clusters/{{ cluster.cluster_name }}/proyectos/{{ cluster.project_name }}/{{ cluster.proyectos[index].name }}/{{ cluster.proyectos[index].name }}-runner.yaml"
+        regexp: "VALUES_VAL_TEMPLATE:"
+        line: "        VALUES_VAL_TEMPLATE: {{ result.stdout }}"
+      tags: 
+        - proyectos 
+      loop: "{{ encoded_value.results }}"
+      loop_control:
+        index_var: index
+        loop_var: result 
+    
+    - name: "Reemplazar valor en VALUES_STAG_TEMPLATE"
+      lineinfile:
+        path: "clusters/{{ cluster.cluster_name }}/proyectos/{{ cluster.project_name }}/{{ cluster.proyectos[index].name }}/{{ cluster.proyectos[index].name }}-runner.yaml"
+        regexp: "VALUES_STAG_TEMPLATE:"
+        line: "        VALUES_STAG_TEMPLATE: {{ result.stdout }}"
+      tags: 
+        - proyectos 
+      loop: "{{ encoded_value.results }}"
+      loop_control:
+        index_var: index
+        loop_var: result 
+    
+    - name: "Reemplazar valor en VALUES_PROD_TEMPLATE"
+      lineinfile:
+        path: "clusters/{{ cluster.cluster_name }}/proyectos/{{ cluster.project_name }}/{{ cluster.proyectos[index].name }}/{{ cluster.proyectos[index].name }}-runner.yaml"
+        regexp: "VALUES_PROD_TEMPLATE:"
+        line: "    VALUES_PROD_TEMPLATE: {{ result.stdout }}"
+      tags: 
+        - proyectos 
+      loop: "{{ encoded_value.results }}"
+      loop_control:
+        index_var: index
+        loop_var: result 
+
+    - name: Eliminando instalaciones anteriores Helm
+      kubernetes.core.helm:
+        state: absent
+        name: "{{ item.name }}-runner"
+        chart_ref: "gitlab/gitlab-runner"
+        release_namespace: cicd
+        values_files:
+          - "clusters/{{ cluster.cluster_name }}/proyectos/{{ cluster.project_name }}/{{ item.name }}/{{ item.name }}-runner.yaml"
+      loop: "{{ cluster.proyectos }}"
+      tags:
+        - proyectos      
+        - proyectos-helm
+
+    - name: Instalando Helm 
+      kubernetes.core.helm:
+        name: "{{ item.name }}-runner"
+        chart_ref: "gitlab/gitlab-runner"
+        chart_version: "0.52.1"
+        release_namespace: cicd
+        values_files:
+          - "clusters/{{ cluster.cluster_name }}/proyectos/{{ cluster.project_name }}/{{ item.name }}/{{ item.name }}-runner.yaml"
+      loop: "{{ cluster.proyectos }}"
+      tags:
+        - proyectos      
+        - proyectos-helm
